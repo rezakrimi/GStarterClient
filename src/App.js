@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { Container, Col, Row, Form, Button, Card } from 'react-bootstrap';
 import axios from 'axios';
+import { tracing } from '@opencensus/web-instrumentation-zone';
 
 
 require('dotenv').config()
@@ -36,11 +37,13 @@ function App() {
     const handleSubmit = (event) => {
         event.preventDefault()
         console.log(document.getElementById("searchbar").value)
+        const apiCallSpan = tracing.tracer.startChildSpan({ name: 'api call latency' });
         axios.get(process.env.REACT_APP_SUPPLIER, {
             params: {
                 ingredient: document.getElementById("searchbar").value
             }
         }).then(response => {
+            apiCallSpan.end()
             setSuppliers(response.data);
         });
     }
