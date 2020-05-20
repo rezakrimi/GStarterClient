@@ -7,19 +7,45 @@ import { tracing } from '@opencensus/web-instrumentation-zone';
 
 require('dotenv').config()
 
-
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
 function App() {
     const [vendors, setVendors] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
 
     useEffect(() => {
-        console.log(tracing.tracer.currentRootSpan)
-        tracing.tracer.startRootSpan({ name: 'getting vendors', samplingRate: 1.0 }, async rootSpan => {
-            var res = [];
+        // console.log(tracing.tracer.currentRootSpan)
+        // tracing.tracer.startRootSpan({ name: 'getting vendors', samplingRate: 1.0 }, async rootSpan => {
+        //     var res = [];
+        //     var promises = [];
+        //     console.log(suppliers);
+        //     const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors' });
+        //     for (var i = 0; i < suppliers.length; i++) {
+        //         console.log(process.env.REACT_APP_VENDOR + suppliers[i]);
+        //         promises.push(axios.get(process.env.REACT_APP_VENDOR + suppliers[i], {
+        //             params: {
+        //                 ingredient: document.getElementById("searchbar").value
+        //             }
+        //         }).then(response => {
+        //             console.log("data", response)
+        //             if (Object.keys(response.data).length > 1) {
+        //                 res.push(response.data);
+        //             }
+        //         }));
+        //     }
+        //     axios.all(promises).then((results) => {
+        //         vendorsCallSpan.end();
+        //         setVendors(res);
+        //         console.log(res);
+        //         rootSpan.end();
+        //     });  
+        // });
+        var res = [];
             var promises = [];
             console.log(suppliers);
-            const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors' });
+            const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors', childOf: window.rootid });
             for (var i = 0; i < suppliers.length; i++) {
                 console.log(process.env.REACT_APP_VENDOR + suppliers[i]);
                 promises.push(axios.get(process.env.REACT_APP_VENDOR + suppliers[i], {
@@ -38,22 +64,43 @@ function App() {
                 setVendors(res);
                 console.log(res);
             });
-            rootSpan.end();
-        });
     }, [suppliers]);
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
         console.log(document.getElementById("searchbar").value);
         const supplierCallSpan = tracing.tracer.startChildSpan({ name: 'retrieving possible vendors from the supplier server' });
+        window.rootid = tracing.tracer.currentRootSpan;
         axios.get(process.env.REACT_APP_SUPPLIER, {
             params: {
                 ingredient: document.getElementById("searchbar").value
             }
         }).then(response => {
             supplierCallSpan.end();
-            setSuppliers(response.data);
+            var res = [];
+            var promises = [];
+            console.log(response.data);
+            const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors', childOf: window.rootid });
+            for (var i = 0; i < response.data.length; i++) {
+                console.log(process.env.REACT_APP_VENDOR + response.data[i]);
+                promises.push(axios.get(process.env.REACT_APP_VENDOR + response.data[i], {
+                    params: {
+                        ingredient: document.getElementById("searchbar").value
+                    }
+                }).then(response => {
+                    console.log("data", response)
+                    if (Object.keys(response.data).length > 1) {
+                        res.push(response.data);
+                    }
+                }));
+            }
+            axios.all(promises).then((results) => {
+                vendorsCallSpan.end();
+                setVendors(res);
+                console.log(res);
+            });
         });
+        console.log('hi');
     }
 
     return (
