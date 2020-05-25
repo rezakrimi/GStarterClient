@@ -15,74 +15,28 @@ function App() {
     const [vendors, setVendors] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
 
-    useEffect(() => {
-        // console.log(tracing.tracer.currentRootSpan)
-        // tracing.tracer.startRootSpan({ name: 'getting vendors', samplingRate: 1.0 }, async rootSpan => {
-        //     var res = [];
-        //     var promises = [];
-        //     console.log(suppliers);
-        //     const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors' });
-        //     for (var i = 0; i < suppliers.length; i++) {
-        //         console.log(process.env.REACT_APP_VENDOR + suppliers[i]);
-        //         promises.push(axios.get(process.env.REACT_APP_VENDOR + suppliers[i], {
-        //             params: {
-        //                 ingredient: document.getElementById("searchbar").value
-        //             }
-        //         }).then(response => {
-        //             console.log("data", response)
-        //             if (Object.keys(response.data).length > 1) {
-        //                 res.push(response.data);
-        //             }
-        //         }));
-        //     }
-        //     axios.all(promises).then((results) => {
-        //         vendorsCallSpan.end();
-        //         setVendors(res);
-        //         console.log(res);
-        //         rootSpan.end();
-        //     });  
-        // });
-        var res = [];
-            var promises = [];
-            console.log(suppliers);
-            const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors', childOf: window.rootid });
-            for (var i = 0; i < suppliers.length; i++) {
-                console.log(process.env.REACT_APP_VENDOR + suppliers[i]);
-                promises.push(axios.get(process.env.REACT_APP_VENDOR + suppliers[i], {
-                    params: {
-                        ingredient: document.getElementById("searchbar").value
-                    }
-                }).then(response => {
-                    console.log("data", response)
-                    if (Object.keys(response.data).length > 1) {
-                        res.push(response.data);
-                    }
-                }));
-            }
-            axios.all(promises).then((results) => {
-                vendorsCallSpan.end();
-                setVendors(res);
-                console.log(res);
-            });
-    }, [suppliers]);
-
     const handleSubmit = async (event) => {
         event.preventDefault();
         console.log(document.getElementById("searchbar").value);
+        //starting the span to trace time for receiving possible vendors from the supplier server
         const supplierCallSpan = tracing.tracer.startChildSpan({ name: 'retrieving possible vendors from the supplier server' });
-        window.rootid = tracing.tracer.currentRootSpan;
+        // sending a get request to the supplier server
         axios.get(process.env.REACT_APP_SUPPLIER, {
             params: {
                 ingredient: document.getElementById("searchbar").value
             }
         }).then(response => {
+            // ending the span for receiving possible vendors from the supplier server
             supplierCallSpan.end();
             var res = [];
             var promises = [];
             console.log(response.data);
+            // starting the span for tracing the time for receiving the quantity and price from all the possible vendors
             const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors', childOf: window.rootid });
+            // sending a request to all the possible vendors
             for (var i = 0; i < response.data.length; i++) {
                 console.log(process.env.REACT_APP_VENDOR + response.data[i]);
+                // pushing into a list to be able to update the page once all the requests are finihsed
                 promises.push(axios.get(process.env.REACT_APP_VENDOR + response.data[i], {
                     params: {
                         ingredient: document.getElementById("searchbar").value
@@ -93,8 +47,9 @@ function App() {
                         res.push(response.data);
                     }
                 }));
-            }
+            } 
             axios.all(promises).then((results) => {
+                // once all the requests in promises list are done, finish the span receiving data from all possible vendors
                 vendorsCallSpan.end();
                 setVendors(res);
                 console.log(res);
