@@ -3,13 +3,31 @@ import './App.css';
 import { Container, Col, Row, Form, Button, Card } from 'react-bootstrap';
 import axios from 'axios';
 import { tracing } from '@opencensus/web-instrumentation-zone';
+import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/tracing';
+import { WebTracerProvider } from '@opentelemetry/web';
+import { DocumentLoad } from '@opentelemetry/plugin-document-load';
+const opentelemetry = require('@opentelemetry/api');
+
 
 
 require('dotenv').config()
 
+// Minimum required setup for the tracer - supports only synchronous operations
+const provider = new WebTracerProvider({
+    plugins: [
+        new DocumentLoad()
+    ]
+});
+
+provider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+provider.register();
+
+opentelemetry.trace.setGlobalTracerProvider(provider);
+const tracer = opentelemetry.trace.getTracer('basic');
+
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-  }
+}
 
 function App() {
     const [vendors, setVendors] = useState([]);
@@ -18,8 +36,14 @@ function App() {
     const handleSubmit = async (event) => {
         event.preventDefault();
         console.log(document.getElementById("searchbar").value);
-        //starting the span to trace time for receiving possible vendors from the supplier server
+        // opencensus: starting the span to trace time for receiving possible vendors from the supplier server
         const supplierCallSpan = tracing.tracer.startChildSpan({ name: 'retrieving possible vendors from the supplier server' });
+
+        // opentelemetry: starting span
+        const supplierSpan = tracer.startSpan('retrieving possible vendors from the supplier server');
+        supplierSpan.setAttribute('key', 'value');
+        supplierSpan.addEvent('invoking work');
+
         // sending a get request to the supplier server
         axios.get(process.env.REACT_APP_SUPPLIER, {
             params: {
@@ -28,6 +52,7 @@ function App() {
         }).then(response => {
             // ending the span for receiving possible vendors from the supplier server
             supplierCallSpan.end();
+            supplierSpan.end();
             var res = [];
             var promises = [];
             console.log(response.data);
@@ -47,7 +72,7 @@ function App() {
                         res.push(response.data);
                     }
                 }));
-            } 
+            }
             axios.all(promises).then((results) => {
                 // once all the requests in promises list are done, finish the span receiving data from all possible vendors
                 vendorsCallSpan.end();
