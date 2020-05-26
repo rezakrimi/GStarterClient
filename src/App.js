@@ -6,11 +6,31 @@ import { tracing } from '@opencensus/web-instrumentation-zone';
 import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/tracing';
 import { WebTracerProvider } from '@opentelemetry/web';
 import { DocumentLoad } from '@opentelemetry/plugin-document-load';
+import { CollectorExporter } from '@opentelemetry/exporter-collector';
 const opentelemetry = require('@opentelemetry/api');
 
 
 
 require('dotenv').config()
+
+
+// Edit this to point to the app to the OpenTelemetry Collector address:
+// If running locally use http://localhost:55678/v1/trace
+const collectorURL = `http://34.69.255.184:55678/v1/trace`;
+// const collectorURL = 'http://35.188.162.236/v1/trace';
+
+const webTracer = new WebTracerProvider({
+  plugins: [
+    new DocumentLoad(),
+  ],
+});
+const collectorOptions = {
+  url: collectorURL,
+};
+const exporter = new CollectorExporter(collectorOptions);
+webTracer.addSpanProcessor(new SimpleSpanProcessor(exporter));
+
+
 
 // Minimum required setup for the tracer - supports only synchronous operations
 const provider = new WebTracerProvider({
@@ -22,7 +42,7 @@ const provider = new WebTracerProvider({
 provider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
 provider.register();
 
-opentelemetry.trace.setGlobalTracerProvider(provider);
+opentelemetry.trace.setGlobalTracerProvider(webTracer);
 const tracer = opentelemetry.trace.getTracer('basic');
 
 function sleep(ms) {
@@ -36,13 +56,16 @@ function App() {
     const handleSubmit = async (event) => {
         event.preventDefault();
         console.log(document.getElementById("searchbar").value);
+        // opentelemetry: starting span to trace the whole process of getting quantity and price for an ingredient
+        const searchSpan = tracer.startSpan('Opentelemetry: finding vendors selling the ingredient');
+
         // opencensus: starting the span to trace time for receiving possible vendors from the supplier server
-        const supplierCallSpan = tracing.tracer.startChildSpan({ name: 'retrieving possible vendors from the supplier server' });
+        const supplierCallSpan = tracing.tracer.startChildSpan({ name: 'Opencensus: retrieving possible vendors from the supplier server' });
 
         // opentelemetry: starting span
-        const supplierSpan = tracer.startSpan('retrieving possible vendors from the supplier server');
-        supplierSpan.setAttribute('key', 'value');
-        supplierSpan.addEvent('invoking work');
+        const supplierSpan = tracer.startSpan('Opentelemetry: retrieving possible vendors from the supplier server', {parent:searchSpan});
+        // supplierSpan.setAttribute('key', 'value');
+        // supplierSpan.addEvent('invoking work');
 
         // sending a get request to the supplier server
         axios.get(process.env.REACT_APP_SUPPLIER, {
@@ -56,8 +79,12 @@ function App() {
             var res = [];
             var promises = [];
             console.log(response.data);
-            // starting the span for tracing the time for receiving the quantity and price from all the possible vendors
-            const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'getting data from vendors', childOf: window.rootid });
+            // Opencesus: starting the span for tracing the time for receiving the quantity and price from all the possible vendors
+            const vendorsCallSpan = tracing.tracer.startChildSpan({ name: 'Opencesus: getting data from vendors'});
+
+            // Opentelemetry: 
+            const vendorSpan = tracer.startSpan('Opentelemetry: getting data from vendors', {parent:searchSpan});
+
             // sending a request to all the possible vendors
             for (var i = 0; i < response.data.length; i++) {
                 console.log(process.env.REACT_APP_VENDOR + response.data[i]);
@@ -76,6 +103,8 @@ function App() {
             axios.all(promises).then((results) => {
                 // once all the requests in promises list are done, finish the span receiving data from all possible vendors
                 vendorsCallSpan.end();
+                vendorSpan.end();
+                searchSpan.end();
                 setVendors(res);
                 console.log(res);
             });
@@ -91,7 +120,7 @@ function App() {
                         <Form.Control id="searchbar" type="text" placeholder="Search for an ingredient i.e. yeast, flour" />
                     </Col>
                     <Col xs={1}>
-                        <Button data-ocweb-id='Trace user interaction' id="searchBtn" onClick={handleSubmit} type="submit">
+                        <Button data-ocweb-id='Opencensus: Trace user inTrace user interaction' id="searchBtn" onClick={handleSubmit} type="submit">
                             Search
                         </Button>
                     </Col>
